@@ -1,6 +1,9 @@
 ﻿using Discord;
+using Discord.Commands;
 using Discord.WebSocket;
+using Microsoft.Extensions.DependencyInjection;
 using RO_bot.Config;
+using RO_bot.Services;
 using System;
 using System.Threading.Tasks;
 
@@ -16,16 +19,22 @@ namespace RO_bot
 
         public async Task MainAsync()
         {
-            LoadConfig("botConfig.json");
-            _client = new DiscordSocketClient();
-            _client.Log += Log;
-            await _client.LoginAsync(TokenType.Bot, _config.BotToken);
-            await _client.StartAsync();
+            using (var services = ConfigureServices()) {
+                LoadConfig("botConfig.json");
+                _client = services.GetRequiredService<DiscordSocketClient>();
+                _client.Log += LogAsync;
+                services.GetRequiredService<CommandService>().Log += LogAsync;
 
-            await Task.Delay(-1);
+                await _client.LoginAsync(TokenType.Bot, _config.BotToken);
+                await _client.StartAsync();
+
+                await services.GetRequiredService<CommandHandlingService>().InitializeAsync();
+
+                await Task.Delay(-1);
+            }
         }
 
-        private Task Log(LogMessage msg)
+        private Task LogAsync(LogMessage msg)
         {
             Console.WriteLine(msg.ToString());
             return Task.CompletedTask;
@@ -34,6 +43,15 @@ namespace RO_bot
         private void LoadConfig(string path)
         {
             _config = new JsonReader(path).Load<BotConfig>();
+        }
+
+        private ServiceProvider ConfigureServices()
+        {
+            return new ServiceCollection()
+                .AddSingleton<DiscordSocketClient>()
+                .AddSingleton<CommandService>()
+                .AddSingleton<CommandHandlingService>()
+                .BuildServiceProvider();
         }
     }
 }
